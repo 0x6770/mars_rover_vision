@@ -1,15 +1,17 @@
+`include "rgb2hue.v"
+
 module rgb2hue_tb;
 
   parameter FIXED = 4;
-  parameter WIDTH = 20;
+  parameter PRECISION = 20;
 
   reg clk = 0;
-  reg rst = 0;
+  reg rst = 1;
   reg [7:0] r, g, b;
-  wire [WIDTH-1:0] hue_fp; 
-  wire [WIDTH-1:0] hue = hue_fp >> FIXED;
+  wire [PRECISION-1:0] hue;
 
   initial begin
+    #10 rst <= 0;
     r <= 255;
     g <= 200;
     b <= 100;
@@ -37,16 +39,16 @@ module rgb2hue_tb;
 
   rgb2hue #(
     .FIXED(FIXED),
-    .WIDTH(WIDTH)
+    .PRECISION(PRECISION)
   ) find_hue (
     .clk(clk),
-    .hsv_h(hue_fp),
+    .hue(hue),
     .r(r),
     .g(g),
     .b(b)
   );
 
   initial 
-    $monitor("At time %t,  rgb=%d,%d,%d,  clk=%b,  hue_fp=%b, hue=%d", $time, r, g, b, clk, hue_fp, hue);
+    $monitor("At time %t, rgb=%d,%d,%d, hue=%d", $time, r, g, b, hue);
 
 endmodule
