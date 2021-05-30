@@ -1,95 +1,74 @@
 module EEE_IMGPROC(
 	// global clock & reset
-	clk,
-	reset_n,
+	input clk,
+	input reset_n,
 	
-	// mm slave
-	s_chipselect,
-	s_read,
-	s_write,
-	s_readdata,
-	s_writedata,
-	s_address,
+  // mm slave
+  input							s_chipselect,
+  input							s_read,
+  input             s_write,
+  output reg [31:0] s_readdata,
+  input      [31:0] s_writedata,
+  input      [2:0]  s_address,
 
-	// stream sink
-	sink_data,
-	sink_valid,
-	sink_ready,
-	sink_sop,
-	sink_eop,
-	
-	// streaming source
-	source_data,
-	source_valid,
-	source_ready,
-	source_sop,
-	source_eop,
-	
-	// conduit
-	mode
-	
+  // streaming sink
+  input	[23:0] sink_data,
+  input        sink_valid,
+  output       sink_ready,
+  input        sink_sop,
+  input        sink_eop,
+
+  // streaming source
+  output [23:0] source_data,
+  output        source_valid,
+  input         source_ready,
+  output        source_sop,
+  output        source_eop,
+
+  // conduit export
+  input mode
 );
 
-
-// global clock & reset
-input	clk;
-input	reset_n;
-
-// mm slave
-input							s_chipselect;
-input							s_read;
-input							s_write;
-output	reg	[31:0]	s_readdata;
-input	[31:0]				s_writedata;
-input	[2:0]					s_address;
-
-
-// streaming sink
-input	[23:0]            	sink_data;
-input								sink_valid;
-output							sink_ready;
-input								sink_sop;
-input								sink_eop;
-
-// streaming source
-output	[23:0]			  	   source_data;
-output								source_valid;
-input									source_ready;
-output								source_sop;
-output								source_eop;
-
-// conduit export
-input                         mode;
-
-////////////////////////////////////////////////////////////////////////
-//
-parameter IMAGE_W = 11'd640;
-parameter IMAGE_H = 11'd480;
+// -- Parameter Deffinition ---------------------------------------------------
+parameter IMAGE_W         = 11'd640;
+parameter IMAGE_H         = 11'd480;
 parameter MESSAGE_BUF_MAX = 256;
-parameter MSG_INTERVAL = 6;
-parameter BB_COL_DEFAULT = 24'h00ff00;
+parameter MSG_INTERVAL    = 6;
+parameter BB_COL_DEFAULT  = 24'h00ff00;
 
+wire [7:0] red, green, blue, grey;
+wire [7:0] red_f, green_f, blue_f, grey_f;
+wire [7:0] red_out, green_out, blue_out;
+wire       sop, eop, in_valid, out_ready;
 
-wire [7:0]   red, green, blue, grey;
-wire [7:0]   red_out, green_out, blue_out;
+// -- Detect Target Color -----------------------------------------------------
+wire [15:0] upper, lower, margin, target;
 
-wire         sop, eop, in_valid, out_ready;
-////////////////////////////////////////////////////////////////////////
+assign target = 16'd 16;
+assign margin = 16'd 20;
+assign upper  = 16'd 360 + target + margin;
+assign lower  = 16'd 360 + target - margin;
 
-// Detect red areas
-wire red_detect;
-assign red_detect = red[7] & ~green[7] & ~blue[7];
+function detect(
+  input [15:0] h,s,v
+);
+  begin
+    detect = ((h+16'd 360)>lower) && ((h+16'd 360)<upper) && (s>50);
+  end
+endfunction
 
 // Find boundary of cursor box
 
 // Highlight detected areas
 wire [23:0] red_high;
+wire [7:0] hue, saturation, value;
 assign grey = green[7:1] + red[7:2] + blue[7:2]; //Grey = green/2 + red/4 + blue/4
-assign red_high  =  red_detect ? {8'hff, 8'h0, 8'h0} : {grey, grey, grey};
+assign red_high  = (detect(hue,saturation,value)) ? {red_f,green_f,blue_f} : {grey, grey, grey};
+//assign red_high  =  red_detect ? {8'hff, 8'h0, 8'h0} : {grey, grey, grey};
 
 // Show bounding box
 wire [23:0] new_image;
-wire bb_active;
+wire        bb_active;
 assign bb_active = (x == left) | (x == right) | (y == top) | (y == bottom);
 assign new_image = bb_active ? bb_col : red_high;
 
@@ -100,7 +79,7 @@ assign {red_out, green_out, blue_out} = (mode & ~sop & packet_video) ? new_image
 
 //Count valid pixels to tget the image coordinates. Reset and detect packet type on Start of Packet.
 reg [10:0] x, y;
-reg packet_video;
+reg        packet_video;
 always@(posedge clk) begin
 	if (sop) begin
 		x <= 11'h0;
@@ -121,7 +100,7 @@ end
 //Find first and last red pixels
 reg [10:0] x_min, y_min, x_max, y_max;
 always@(posedge clk) begin
-	if (red_detect & in_valid) begin	//Update bounds when the pixel is red
+	if (detect(hue,saturation,value)& in_valid) begin	//Update bounds when the pixel is red
 		if (x < x_min) x_min <= x;
 		if (x > x_max) x_max <= x;
 		if (y < y_min) y_min <= y;
@@ -136,9 +115,9 @@ always@(posedge clk) begin
 end
 
 //Process bounding box at the end of the frame.
-reg [1:0] msg_state;
+reg [1:0]  msg_state;
 reg [10:0] left, right, top, bottom;
-reg [7:0] frame_count;
+reg [7:0]  frame_count;
 always@(posedge clk) begin
 	if (eop & in_valid & packet_video) begin  //Ignore non-video packets
 		
@@ -164,12 +143,12 @@ always@(posedge clk) begin
 end
 	
 //Generate output messages for CPU
-reg [31:0] msg_buf_in; 
+reg [31:0]  msg_buf_in; 
 wire [31:0] msg_buf_out;
-reg msg_buf_wr;
-wire msg_buf_rd, msg_buf_flush;
-wire [7:0] msg_buf_size;
-wire msg_buf_empty;
+reg         msg_buf_wr;
+wire        msg_buf_rd, msg_buf_flush;
+wire [7:0]  msg_buf_size;
+wire        msg_buf_empty;
 
 `define RED_BOX_MSG_ID "RBB"
 
@@ -207,6 +186,54 @@ MSG_FIFO	MSG_FIFO_inst (
 	.empty (msg_buf_empty)
 	);
 
+// Moving Average
+FILTER_CONV #(
+  .N(3),
+  .PRECISION(31),
+  .FIXED(8),
+  .LINE_WIDTH(IMAGE_W)
+) filt_r (
+  .rst(reset_n),
+  .clk(clk),
+  .data_in(red),
+  .data_out(red_f)
+);
+
+FILTER_CONV #(
+  .N(3),
+  .PRECISION(31),
+  .FIXED(8),
+  .LINE_WIDTH(IMAGE_W)
+) filt_g (
+  .rst(reset_n),
+  .clk(clk),
+  .data_in(green),
+  .data_out(green_f)
+);
+
+FILTER_CONV #(
+  .N(3),
+  .PRECISION(31),
+  .FIXED(8),
+  .LINE_WIDTH(IMAGE_W)
+) filt_b (
+  .rst(reset_n),
+  .clk(clk),
+  .data_in(blue),
+  .data_out(blue_f)
+);
+
+// RGB to Hue
+RGB2HSV h1 (
+  .clk(clk),
+  .rst(reset_n),
+  .red(red_f),
+  .green(green_f),
+  .blue(blue_f),
+  .hue(hue),
+  .saturation(saturation),
+  .value(value)
+);
 
 //Streaming registers to buffer video signal
 STREAM_REG #(.DATA_WIDTH(26)) in_reg (
@@ -299,7 +326,4 @@ end
 //Fetch next word from message buffer after read from READ_MSG
 assign msg_buf_rd = s_chipselect & s_read & ~read_d & ~msg_buf_empty & (s_address == `READ_MSG);
 						
-
-
 endmodule
-
