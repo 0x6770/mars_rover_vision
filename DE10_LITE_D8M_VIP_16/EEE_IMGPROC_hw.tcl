@@ -160,7 +160,7 @@ add_interface_port s1 s_read read Input 1
 add_interface_port s1 s_write write Input 1
 add_interface_port s1 s_readdata readdata Output 32
 add_interface_port s1 s_writedata writedata Input 32
-add_interface_port s1 s_address address Input 3
+add_interface_port s1 s_address address Input 4
 set_interface_assignment s1 embeddedsw.configuration.isFlash 0
 set_interface_assignment s1 embeddedsw.configuration.isMemoryDevice 0
 set_interface_assignment s1 embeddedsw.configuration.isNonVolatileStorage 0
@@ -181,3 +181,13 @@ set_interface_property conduit_mode SVD_ADDRESS_GROUP ""
 
 add_interface_port conduit_mode mode new_signal Input 1
 
+add_interface conduit_disp conduit end
+set_interface_property conduit_disp associatedClock clock
+set_interface_property conduit_disp associatedReset ""
+set_interface_property conduit_disp ENABLED true
+set_interface_property conduit_disp EXPORT_OF ""
+set_interface_property conduit_disp PORT_NAME_MAP ""
+set_interface_property conduit_disp CMSIS_SVD_VARIABLES ""
+set_interface_property conduit_disp SVD_ADDRESS_GROUP ""
+
+add_interface_port conduit_disp disp new_signal Output 32

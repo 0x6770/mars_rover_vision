@@ -26,8 +26,11 @@ module EEE_IMGPROC(
   output        source_eop,
 
   // conduit export
-  input mode
+  input mode,
+  output [31:0] disp
 );
+
+assign disp = hue_t[0];
 
 // -- Parameter Deffinition ---------------------------------------------------
 parameter IMAGE_W         = 11'd640;
@@ -35,42 +38,58 @@ parameter IMAGE_H         = 11'd480;
 parameter MESSAGE_BUF_MAX = 256;
 parameter MSG_INTERVAL    = 6;
 parameter BB_COL_DEFAULT  = 24'h00ff00;
+parameter N_COLOR         = 5;
+
+integer i;
+genvar j;
 
 wire [7:0] red, green, blue, grey;
-wire [7:0] red_f, green_f, blue_f, grey_f;
 wire [7:0] red_out, green_out, blue_out;
 wire       sop, eop, in_valid, out_ready;
-
-// -- Detect Target Color -----------------------------------------------------
-wire [15:0] upper, lower, margin, target;
-
-assign target = 16'd 16;
-assign margin = 16'd 20;
-assign upper  = 16'd 360 + target + margin;
-assign lower  = 16'd 360 + target - margin;
-
-function detect(
-  input [15:0] h,s,v
-);
-  begin
-    detect = ((h+16'd 360)>lower) && ((h+16'd 360)<upper) && (s>50);
-  end
-endfunction
 
 // Find boundary of cursor box
 
 // Highlight detected areas
-wire [23:0] red_high;
-wire [7:0] hue, saturation, value;
+wire detect_res_all;
+assign detect_res_all = detect_res[0] | detect_res[1]
+                      | detect_res[2] | detect_res[3] 
+                      | detect_res[4];
+
 assign grey = green[7:1] + red[7:2] + blue[7:2]; //Grey = green/2 + red/4 + blue/4
-assign red_high  = (detect(hue,saturation,value)) ? {red_f,green_f,blue_f} : {grey, grey, grey};
-//assign red_high  =  red_detect ? {8'hff, 8'h0, 8'h0} : {grey, grey, grey};
+
+wire [23:0] color_high [N_COLOR-1:0];
+wire [23:0] color_high_all;
+
+assign color_high[0] = detect_res[0] ? 24'hff_00_00 : {grey, grey, grey};
+assign color_high[1] = detect_res[1] ? 24'hff_b6_c1 : {grey, grey, grey};
+assign color_high[2] = detect_res[2] ? 24'hff_ff_00 : {grey, grey, grey};
+assign color_high[3] = detect_res[3] ? 24'h00_ff_00 : {grey, grey, grey};
+assign color_high[4] = detect_res[4] ? 24'h00_00_ff : {grey, grey, grey};
+
+assign color_high_all = detect_res[0] ? color_high[0] :
+                        detect_res[1] ? color_high[1] :
+                        detect_res[2] ? color_high[2] :
+                        detect_res[3] ? color_high[3] :
+                        detect_res[4] ? color_high[4] : {grey, grey, grey};
 
 // Show bounding box
-wire [23:0] new_image;
-wire        bb_active;
-assign bb_active = (x == left) | (x == right) | (y == top) | (y == bottom);
-assign new_image = bb_active ? bb_col : red_high;
+wire [23:0]        new_image;
+wire [N_COLOR-1:0] bb_active_color;
+wire bb_active;
+
+generate
+  for (j=0; j<N_COLOR; j=j+1) begin : border_for_each_color
+    assign bb_active_color[j] = (x == left[j]) | (x == right[j]) | (y == top[j]) | (y == bottom[j]);
+  end
+endgenerate
+
+assign bb_active = bb_active_color[0] 
+                 | bb_active_color[1] 
+                 | bb_active_color[2]
+                 | bb_active_color[3]
+                 | bb_active_color[4];
+
+assign new_image = bb_active ? 24'hff0000 : color_high_all;
 
 // Switch output pixels depending on mode switch
 // Don't modify the start-of-packet word - it's a packet discriptor
@@ -98,34 +117,45 @@ always@(posedge clk) begin
 end
 
 //Find first and last red pixels
-reg [10:0] x_min, y_min, x_max, y_max;
+reg [10:0] x_min [N_COLOR-1:0];
+reg [10:0] y_min [N_COLOR-1:0];
+reg [10:0] x_max [N_COLOR-1:0];
+reg [10:0] y_max [N_COLOR-1:0];
+
 always@(posedge clk) begin
-	if (detect(hue,saturation,value)& in_valid) begin	//Update bounds when the pixel is red
-		if (x < x_min) x_min <= x;
-		if (x > x_max) x_max <= x;
-		if (y < y_min) y_min <= y;
-		y_max <= y;
-	end
-	if (sop & in_valid) begin	//Reset bounds on start of packet
-		x_min <= IMAGE_W-11'h1;
-		x_max <= 0;
-		y_min <= IMAGE_H-11'h1;
-		y_max <= 0;
-	end
+  for (i=0; i<N_COLOR; i=i+1) begin : find_min_max_for_each_color
+    if (detect_res[i] & in_valid) begin	//Update bounds when the pixel is red
+      if (x < x_min[i]) x_min[i] <= x;
+      if (x > x_max[i]) x_max[i] <= x;
+      if (y < y_min[i]) y_min[i] <= y;
+      y_max[i] <= y;
+    end
+    if (sop & in_valid) begin	//Reset bounds on start of packet
+      x_min[i] <= IMAGE_W-11'h1;
+      x_max[i] <= 0;
+      y_min[i] <= IMAGE_H-11'h1;
+      y_max[i] <= 0;
+    end
+  end
 end
 
 //Process bounding box at the end of the frame.
 reg [1:0]  msg_state;
-reg [10:0] left, right, top, bottom;
+reg [10:0] left   [N_COLOR-1:0];
+reg [10:0] right  [N_COLOR-1:0];
+reg [10:0] top    [N_COLOR-1:0];
+reg [10:0] bottom [N_COLOR-1:0];
 reg [7:0]  frame_count;
 always@(posedge clk) begin
 	if (eop & in_valid & packet_video) begin  //Ignore non-video packets
 		
+  for (i=0; i<N_COLOR; i=i+1) begin : latch_edges
 		//Latch edges for display overlay on next frame
-		left <= x_min;
-		right <= x_max;
-		top <= y_min;
-		bottom <= y_max;
+		left[i]   <= x_min[i];
+		right[i]  <= x_max[i];
+		top[i]    <= y_min[i];
+		bottom[i] <= y_max[i];
+  end
 		
 		
 		//Start message writer FSM once every MSG_INTERVAL frames, if there is room in the FIFO
@@ -163,16 +193,32 @@ always@(*) begin	//Write words to FIFO as state machine advances
 			msg_buf_wr = 1'b1;
 		end
 		2'b10: begin
-			msg_buf_in = {5'b0, x_min, 5'b0, y_min};	//Top left coordinate
+			msg_buf_in = {5'b0, x_min[0], 5'b0, y_min[0]};	//Top left coordinate
 			msg_buf_wr = 1'b1;
 		end
 		2'b11: begin
-			msg_buf_in = {5'b0, x_max, 5'b0, y_max}; //Bottom right coordinate
+			msg_buf_in = {5'b0, x_max[0], 5'b0, y_max[0]}; //Bottom right coordinate
 			msg_buf_wr = 1'b1;
 		end
 	endcase
 end
 
+
+// -- Detect Target Color -----------------------------------------------------
+wire [N_COLOR-1:0] detect_res;
+reg  [15:0] hue, sat, val; // hue [0-360]
+reg  [15:0] hue_t [N_COLOR-1:0];
+reg  [15:0] sat_t [N_COLOR-1:0];
+reg  [15:0] val_t [N_COLOR-1:0];
+
+generate
+  for (j=0; j<N_COLOR; j=j+1) begin : detect_colors
+    assign detect_res[j] = ((hue+15'd360) > (hue_t[j]+15'd350))
+                         & ((hue+15'd360) < (hue_t[j]+15'd370))
+                         & (sat      > sat_t[j])
+                         & (val      > val_t[j]);
+  end
+endgenerate
 
 //Output message FIFO
 MSG_FIFO	MSG_FIFO_inst (
@@ -186,53 +232,49 @@ MSG_FIFO	MSG_FIFO_inst (
 	.empty (msg_buf_empty)
 	);
 
+wire [7:0] red_filt, green_filt, blue_filt;
+
 // Moving Average
-FILTER_CONV #(
-  .N(3),
-  .PRECISION(31),
-  .FIXED(8),
-  .LINE_WIDTH(IMAGE_W)
+filter_conv #(
+  .ROW_W(IMAGE_W)
 ) filt_r (
   .rst(reset_n),
   .clk(clk),
+  .in_valid(in_valid),
   .data_in(red),
-  .data_out(red_f)
+  .data_out(red_filt)
 );
 
-FILTER_CONV #(
-  .N(3),
-  .PRECISION(31),
-  .FIXED(8),
-  .LINE_WIDTH(IMAGE_W)
+filter_conv #(
+  .ROW_W(IMAGE_W)
 ) filt_g (
   .rst(reset_n),
   .clk(clk),
+  .in_valid(in_valid),
   .data_in(green),
-  .data_out(green_f)
+  .data_out(green_filt)
 );
 
-FILTER_CONV #(
-  .N(3),
-  .PRECISION(31),
-  .FIXED(8),
-  .LINE_WIDTH(IMAGE_W)
+filter_conv #(
+  .ROW_W(IMAGE_W)
 ) filt_b (
   .rst(reset_n),
   .clk(clk),
+  .in_valid(in_valid),
   .data_in(blue),
-  .data_out(blue_f)
+  .data_out(blue_filt)
 );
 
 // RGB to Hue
-RGB2HSV h1 (
+rgb2hsv h1 (
   .clk(clk),
   .rst(reset_n),
-  .red(red_f),
-  .green(green_f),
-  .blue(blue_f),
+  .red(red_filt),
+  .green(green_filt),
+  .blue(blue_filt),
   .hue(hue),
-  .saturation(saturation),
-  .value(value)
+  .sat(sat),
+  .val(val)
 );
 
 //Streaming registers to buffer video signal
@@ -264,10 +306,16 @@ STREAM_REG #(.DATA_WIDTH(26)) out_reg (
 /////////////////////////////////
 
 // Addresses
-`define REG_STATUS    			0
-`define READ_MSG    				1
-`define READ_ID    				2
-`define REG_BBCOL					3
+`define REG_STATUS  0
+`define READ_MSG    1
+`define READ_ID     2
+`define REG_BBCOL   3
+
+`define HSV_RED     4
+`define HSV_PINK    5
+`define HSV_YELLOW  6
+`define HSV_GREEN   7
+`define HSV_BLUE    8
 
 //Status register bits
 // 31:16 - unimplemented
@@ -279,22 +327,47 @@ STREAM_REG #(.DATA_WIDTH(26)) out_reg (
 
 // Process write
 
-reg  [7:0]   reg_status;
-reg	[23:0]	bb_col;
+reg  [7:0] reg_status;
+reg	[23:0] bb_col;
 
 always @ (posedge clk)
 begin
-	if (~reset_n)
-	begin
-		reg_status <= 8'b0;
-		bb_col <= BB_COL_DEFAULT;
-	end
-	else begin
-		if(s_chipselect & s_write) begin
-		   if      (s_address == `REG_STATUS)	reg_status <= s_writedata[7:0];
-		   if      (s_address == `REG_BBCOL)	bb_col <= s_writedata[23:0];
-		end
-	end
+  if (~reset_n)
+    begin
+      reg_status <= 8'b0;
+      bb_col <= BB_COL_DEFAULT;
+    end
+  else begin
+    if (s_chipselect & s_write) begin
+      if (s_address == `REG_STATUS)	reg_status <= s_writedata[7:0];
+      if (s_address == `REG_BBCOL)	bb_col <= s_writedata[23:0];
+      if (s_address == `HSV_RED) begin 
+        hue_t[0] <= s_writedata[23:14];
+        sat_t[0] <= s_writedata[13:07];
+        val_t[0] <= s_writedata[06:00];
+      end
+      if (s_address == `HSV_PINK) begin
+        hue_t[1] <= s_writedata[23:14];
+        sat_t[1] <= s_writedata[13:07];
+        val_t[1] <= s_writedata[06:00];
+      end
+      if (s_address == `HSV_YELLOW) begin
+        hue_t[2] <= s_writedata[23:14];
+        sat_t[2] <= s_writedata[13:07];
+        val_t[2] <= s_writedata[06:00];
+      end
+      if (s_address == `HSV_GREEN) begin
+        hue_t[3] <= s_writedata[23:14];
+        sat_t[3] <= s_writedata[13:07];
+        val_t[3] <= s_writedata[06:00];
+      end
+      if (s_address == `HSV_BLUE)begin
+        hue_t[4] <= s_writedata[23:14];
+        sat_t[4] <= s_writedata[13:07];
+        val_t[4] <= s_writedata[06:00];
+      end
+    end
+  end
 end
 
 
@@ -308,19 +381,19 @@ reg read_d; //Store the read signal for correct updating of the message buffer
 // Copy the requested word to the output port when there is a read.
 always @ (posedge clk)
 begin
-   if (~reset_n) begin
-	   s_readdata <= {32'b0};
-		read_d <= 1'b0;
-	end
-	
-	else if (s_chipselect & s_read) begin
-		if   (s_address == `REG_STATUS) s_readdata <= {16'b0,msg_buf_size,reg_status};
-		if   (s_address == `READ_MSG) s_readdata <= {msg_buf_out};
-		if   (s_address == `READ_ID) s_readdata <= 32'h1234EEE2;
-		if   (s_address == `REG_BBCOL) s_readdata <= {8'h0, bb_col};
-	end
-	
-	read_d <= s_read;
+  if (~reset_n) begin
+    s_readdata <= {32'b0};
+    read_d <= 1'b0;
+  end
+
+  else if (s_chipselect & s_read) begin
+    if (s_address == `REG_STATUS) s_readdata <= {16'b0,msg_buf_size,reg_status};
+    if (s_address == `READ_MSG)   s_readdata <= {msg_buf_out};
+    if (s_address == `READ_ID)    s_readdata <= 32'h1234EEE2;
+    if (s_address == `REG_BBCOL)  s_readdata <= {8'h0, bb_col};
+  end
+
+  read_d <= s_read;
 end
 
 //Fetch next word from message buffer after read from READ_MSG

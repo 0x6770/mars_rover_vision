@@ -176,8 +176,25 @@ Qsys u0 (
 		.altpll_0_locked_conduit_export            (),            				//          altpll_0_locked_conduit.export
 		.altpll_0_phasedone_conduit_export         (),         					//       altpll_0_phasedone_conduit.export		
 		
-		.eee_imgproc_0_conduit_mode_new_signal     (SW[0])
+		.eee_imgproc_0_conduit_mode_new_signal     (SW[0]),
+    .eee_imgproc_0_conduit_disp_new_signal     (disp)
 	);
+
+wire [31:0] disp;
+
+function [6:0] to_hex;
+  input [3:0] d;
+  to_hex = (d == 4'd0)?7'h40: //0
+           (d == 4'd1)?7'h79: //1
+           (d == 4'd2)?7'h24: //2
+           (d == 4'd3)?7'h30: //3
+           (d == 4'd4)?7'h19: //4        
+           (d == 4'd5)?7'h12: //5
+           (d == 4'd6)?7'h02: //6
+           (d == 4'd7)?7'h78: //7
+           (d == 4'd8)?7'h00: //8
+                       7'h10; //9
+endfunction
 
 FpsMonitor uFps(
 	.clk50(MAX10_CLK2_50),
@@ -189,8 +206,8 @@ FpsMonitor uFps(
 );
 
 assign  HEX2 = 7'h7F;
-assign  HEX3 = 7'h7F;
-assign  HEX4 = 7'h7F;
-assign  HEX5 = 7'h7F;
+assign  HEX3 = to_hex(disp%10);
+assign  HEX4 = to_hex((disp%100)/10);
+assign  HEX5 = to_hex(disp/100);
 
 endmodule
