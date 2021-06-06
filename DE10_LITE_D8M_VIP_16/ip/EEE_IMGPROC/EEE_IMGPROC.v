@@ -30,7 +30,7 @@ module EEE_IMGPROC(
   output [31:0] disp
 );
 
-assign disp = hue_t[0];
+assign disp = hue_t[4];
 
 // -- Parameter Deffinition ---------------------------------------------------
 parameter IMAGE_W         = 11'd640;
@@ -57,39 +57,41 @@ assign detect_res_all = detect_res[0] | detect_res[1]
 
 assign grey = green[7:1] + red[7:2] + blue[7:2]; //Grey = green/2 + red/4 + blue/4
 
-wire [23:0] color_high [N_COLOR-1:0];
-wire [23:0] color_high_all;
+wire [23:0] color [N_COLOR-1:0];
+wire [23:0] color_high;
 
-assign color_high[0] = detect_res[0] ? 24'hff_00_00 : {grey, grey, grey};
-assign color_high[1] = detect_res[1] ? 24'hff_b6_c1 : {grey, grey, grey};
-assign color_high[2] = detect_res[2] ? 24'hff_ff_00 : {grey, grey, grey};
-assign color_high[3] = detect_res[3] ? 24'h00_ff_00 : {grey, grey, grey};
-assign color_high[4] = detect_res[4] ? 24'h00_00_ff : {grey, grey, grey};
+assign color[0] = 24'hff_00_00; // red
+assign color[1] = 24'hff_b6_c1; // pink
+assign color[2] = 24'hff_ff_00; // yellow
+assign color[3] = 24'h00_ff_00; // green
+assign color[4] = 24'h00_00_ff; // blue
 
-assign color_high_all = detect_res[0] ? color_high[0] :
-                        detect_res[1] ? color_high[1] :
-                        detect_res[2] ? color_high[2] :
-                        detect_res[3] ? color_high[3] :
-                        detect_res[4] ? color_high[4] : {grey, grey, grey};
+assign color_high = detect_res[0] ? color[0] :
+                    detect_res[1] ? color[1] :
+                    detect_res[2] ? color[2] :
+                    detect_res[3] ? color[3] :
+                    detect_res[4] ? color[4] : {grey, grey, grey};
 
 // Show bounding box
 wire [23:0]        new_image;
-wire [N_COLOR-1:0] bb_active_color;
-wire bb_active;
+wire [N_COLOR-1:0] bb_active;
+wire bb_active_all;
 
 generate
   for (j=0; j<N_COLOR; j=j+1) begin : border_for_each_color
-    assign bb_active_color[j] = (x == left[j]) | (x == right[j]) | (y == top[j]) | (y == bottom[j]);
+    assign bb_active[j] = (x == left[j]) | (x == right[j]) | (y == top[j]) | (y == bottom[j]);
   end
 endgenerate
 
-assign bb_active = bb_active_color[0] 
-                 | bb_active_color[1] 
-                 | bb_active_color[2]
-                 | bb_active_color[3]
-                 | bb_active_color[4];
+assign bb_active_all = bb_active[0] | bb_active[1] | bb_active[2]
+                     | bb_active[3] | bb_active[4];
 
-assign new_image = bb_active ? 24'hff0000 : color_high_all;
+assign new_image = bb_active[0] ? color[0]
+                 : bb_active[1] ? color[1]
+                 : bb_active[2] ? color[2]
+                 : bb_active[3] ? color[3]
+                 : bb_active[4] ? color[4]
+                 : color_high;
 
 // Switch output pixels depending on mode switch
 // Don't modify the start-of-packet word - it's a packet discriptor
@@ -215,8 +217,8 @@ generate
   for (j=0; j<N_COLOR; j=j+1) begin : detect_colors
     assign detect_res[j] = ((hue+15'd360) > (hue_t[j]+15'd350))
                          & ((hue+15'd360) < (hue_t[j]+15'd370))
-                         & (sat      > sat_t[j])
-                         & (val      > val_t[j]);
+                         & (sat > sat_t[j])
+                         & (val > val_t[j]);
   end
 endgenerate
 
