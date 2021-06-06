@@ -9,7 +9,7 @@ module EEE_IMGPROC(
   input             s_write,
   output reg [31:0] s_readdata,
   input      [31:0] s_writedata,
-  input      [2:0]  s_address,
+  input      [3:0]  s_address,
 
   // streaming sink
   input	[23:0] sink_data,
