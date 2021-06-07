@@ -15,22 +15,26 @@
 #define EEE_IMGPROC_MSG_START ('R' << 16 | 'B' << 8 | 'B')
 
 // offsets
-#define EEE_IMGPROC_STATUS 0
-#define EEE_IMGPROC_MSG 1
-#define EEE_IMGPROC_ID 2
-#define EEE_IMGPROC_BBCOL 3
+#define EEE_IMGPROC_STATUS_0 0
+#define EEE_IMGPROC_STATUS_1 1
+#define EEE_IMGPROC_MSG_0 2
+#define EEE_IMGPROC_MSG_1 3
+#define EEE_IMGPROC_ID 4
+#define EEE_IMGPROC_BBCOL 5
 
-#define HSV_RED 4
-#define HSV_PINK 5
-#define HSV_YELLOW 6
-#define HSV_GREEN 7
-#define HSV_BLUE 8
+#define HSV_R 6
+#define HSV_P 7
+#define HSV_Y 8
+#define HSV_G 9
+#define HSV_B 10
 
-#define EXPOSURE_INIT 0x002000
+/*#define EXPOSURE_INIT 0x002000*/
+#define EXPOSURE_INIT 0x008000
 #define EXPOSURE_STEP 0x100
-#define GAIN_INIT 0x080
+/*#define GAIN_INIT 0x080*/
+#define GAIN_INIT 0x0f0
 #define GAIN_STEP 0x040
-#define DEFAULT_LEVEL 3
+#define DEFAULT_LEVEL 2
 
 #define MIPI_REG_PHYClkCtl 0x0056
 #define MIPI_REG_PHYData0Ctl 0x0058
@@ -191,22 +195,40 @@ int main() {
     }
 
     // Read messages from the image processor and print them on the terminal
-    while ((IORD(0x42000, EEE_IMGPROC_STATUS) >> 8) &
+    /*printf("STATUS %x\n", IORD(0x42000, 1));*/
+    while ((IORD(0x42000, 1) >> 8) &
            0xff) { // Find out if there are words to read
-      int word =
-          IORD(0x42000, EEE_IMGPROC_MSG);  // Get next word from message buffer
+      /*int word =*/
+      /*IORD(0x42000, EEE_IMGPROC_MSG); // Get next word from message buffer*/
+      int word = IORD(0x42000, 3);
       if (word == EEE_IMGPROC_MSG_START) { // Newline on message identifier
         printf("\n");
       } else {
+        printf("pink: ");
         printf("{x:%03d,", (word << 5) >> 21);
         printf("y:%03d},", (word << 21) >> 21);
+        printf("\n");
       }
     }
 
+    while ((IORD(0x42000, 0) >> 8) &
+           0xff) { // Find out if there are words to read
+      /*int word =*/
+      /*IORD(0x42000, EEE_IMGPROC_MSG); // Get next word from message buffer*/
+      int word = IORD(0x42000, 2);
+      if (word == EEE_IMGPROC_MSG_START) { // Newline on message identifier
+        printf("\n");
+      } else {
+        printf("red: ");
+        printf("{x:%03d,", (word << 5) >> 21);
+        printf("y:%03d},", (word << 21) >> 21);
+        printf("\n");
+      }
+    }
     // Update the bounding box colour
-    boundingBoxColour = ((boundingBoxColour + 1) & 0xff);
-    IOWR(0x42000, EEE_IMGPROC_BBCOL,
-         (boundingBoxColour << 8) | (0xff - boundingBoxColour));
+    /*boundingBoxColour = ((boundingBoxColour + 1) & 0xff);*/
+    /*IOWR(0x42000, EEE_IMGPROC_BBCOL,*/
+    /*(boundingBoxColour << 8) | (0xff - boundingBoxColour));*/
 
     // Process input commands
     char str[4];
@@ -237,22 +259,15 @@ int main() {
       }
     }
 
-    printf("\n====================\n");
-    printf("red:    %03d, %03d, %03d\n", color[0][0], color[0][1], color[0][2]);
-    printf("pink:   %03d, %03d, %03d\n", color[1][0], color[1][1], color[1][2]);
-    printf("yellow: %03d, %03d, %03d\n", color[2][0], color[2][1], color[2][2]);
-    printf("green:  %03d, %03d, %03d\n", color[3][0], color[3][1], color[3][2]);
-    printf("blue:   %03d, %03d, %03d\n", color[4][0], color[4][1], color[4][2]);
-
-    IOWR(0x42000, HSV_RED,
+    IOWR(0x42000, HSV_R,
          (color[0][0] << 14) | (color[0][1] << 7) | (color[0][2]));
-    IOWR(0x42000, HSV_PINK,
+    IOWR(0x42000, HSV_P,
          (color[1][0] << 14) | (color[1][1] << 7) | (color[1][2]));
-    IOWR(0x42000, HSV_YELLOW,
+    IOWR(0x42000, HSV_Y,
          (color[2][0] << 14) | (color[2][1] << 7) | (color[2][2]));
-    IOWR(0x42000, HSV_GREEN,
+    IOWR(0x42000, HSV_G,
          (color[3][0] << 14) | (color[3][1] << 7) | (color[3][2]));
-    IOWR(0x42000, HSV_BLUE,
+    IOWR(0x42000, HSV_B,
          (color[4][0] << 14) | (color[4][1] << 7) | (color[4][2]));
 
     // Main loop delay
