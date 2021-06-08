@@ -1,5 +1,3 @@
-
-
 #include "I2C_core.h"
 #include "mipi_bridge_config.h"
 #include "mipi_camera_config.h"
@@ -10,6 +8,9 @@
 
 #include <fcntl.h>
 #include <unistd.h>
+
+// clear screen
+#define clear() printf("\033[H\033[J")
 
 // EEE_IMGPROC defines
 #define EEE_IMGPROC_MSG_START ('R' << 16 | 'B' << 8 | 'B')
@@ -22,17 +23,16 @@
 #define EEE_IMGPROC_ID 4
 #define EEE_IMGPROC_BBCOL 5
 
-#define HSV_R 6
-#define HSV_P 7
-#define HSV_Y 8
-#define HSV_G 9
-#define HSV_B 10
+#define EEE_IMGPROC_STATUS(BASE) BASE * 3 + 0
+#define EEE_IMGPROC_MSG(BASE) BASE * 3 + 1
+#define EEE_IMGPROC_HSV(BASE) BASE * 3 + 2
+/*#define EEE_IMGPROC_MSG_START*/
 
 /*#define EXPOSURE_INIT 0x002000*/
 #define EXPOSURE_INIT 0x008000
 #define EXPOSURE_STEP 0x100
 /*#define GAIN_INIT 0x080*/
-#define GAIN_INIT 0x0f0
+#define GAIN_INIT 0x100
 #define GAIN_STEP 0x040
 #define DEFAULT_LEVEL 2
 
@@ -195,36 +195,34 @@ int main() {
     }
 
     // Read messages from the image processor and print them on the terminal
-    /*printf("STATUS %x\n", IORD(0x42000, 1));*/
-    while ((IORD(0x42000, 1) >> 8) &
-           0xff) { // Find out if there are words to read
-      /*int word =*/
-      /*IORD(0x42000, EEE_IMGPROC_MSG); // Get next word from message buffer*/
-      int word = IORD(0x42000, 3);
-      if (word == EEE_IMGPROC_MSG_START) { // Newline on message identifier
-        printf("\n");
-      } else {
-        printf("pink: ");
-        printf("{x:%03d,", (word << 5) >> 21);
-        printf("y:%03d},", (word << 21) >> 21);
-        printf("\n");
+    for (int i = 0; i < 5; i++) {
+      int j = 0;
+      while ((IORD(0x42000, EEE_IMGPROC_STATUS(i)) >> 8) &
+             0xff) { // Find out if there are words to read
+        int word = IORD(0x42000, EEE_IMGPROC_MSG(i));
+        if (word == EEE_IMGPROC_MSG_START) { // Newline on message identifier
+          printf("\n");
+        } else {
+          if (j) {
+            j = 0;
+            printf("%d: ", i);
+            printf("x_max:%03d", (word << 5) >> 21);
+            printf(", ");
+            printf("y_max:%03d", (word << 21) >> 21);
+          } else {
+            /*if (i == 0)*/
+            /*clear();*/
+            printf("%d: ", i);
+            printf("x_min:%03d", (word << 5) >> 21);
+            printf(", ");
+            printf("y_min:%03d", (word << 21) >> 21);
+            j++;
+          };
+          printf("\n");
+        }
       }
     }
 
-    while ((IORD(0x42000, 0) >> 8) &
-           0xff) { // Find out if there are words to read
-      /*int word =*/
-      /*IORD(0x42000, EEE_IMGPROC_MSG); // Get next word from message buffer*/
-      int word = IORD(0x42000, 2);
-      if (word == EEE_IMGPROC_MSG_START) { // Newline on message identifier
-        printf("\n");
-      } else {
-        printf("red: ");
-        printf("{x:%03d,", (word << 5) >> 21);
-        printf("y:%03d},", (word << 21) >> 21);
-        printf("\n");
-      }
-    }
     // Update the bounding box colour
     /*boundingBoxColour = ((boundingBoxColour + 1) & 0xff);*/
     /*IOWR(0x42000, EEE_IMGPROC_BBCOL,*/
@@ -259,17 +257,10 @@ int main() {
       }
     }
 
-    IOWR(0x42000, HSV_R,
-         (color[0][0] << 14) | (color[0][1] << 7) | (color[0][2]));
-    IOWR(0x42000, HSV_P,
-         (color[1][0] << 14) | (color[1][1] << 7) | (color[1][2]));
-    IOWR(0x42000, HSV_Y,
-         (color[2][0] << 14) | (color[2][1] << 7) | (color[2][2]));
-    IOWR(0x42000, HSV_G,
-         (color[3][0] << 14) | (color[3][1] << 7) | (color[3][2]));
-    IOWR(0x42000, HSV_B,
-         (color[4][0] << 14) | (color[4][1] << 7) | (color[4][2]));
-
+    for (int i = 0; i < 5; i++) {
+      IOWR(0x42000, EEE_IMGPROC_HSV(i),
+           (color[i][0] << 14) | (color[i][1] << 7) | (color[i][2]));
+    }
     // Main loop delay
     usleep(10000);
   };
