@@ -14,58 +14,22 @@ nios2_command_shell nios2-download demo_batch/D8M_Camera_Test.elf -c 1 -g
 nios2-terminal -c 1
 ```
 
-## Translation from real world coordinates to image coordinates
 
-### Perspective Matrix
 
-$$
-\begin{bmatrix}
-x'\\
-y'\\
-z'
-\end{bmatrix}
-=
-\underbrace{
-\begin{bmatrix}
-f & 0 & c_x\\
-0 & f & c_y\\
-0 & 0 & 1
-\end{bmatrix}}_{\mathrm{M}_{\text{proj}}}
-\begin{bmatrix}
-X\\
-Y\\
-Z\\
-1
-\end{bmatrix}
-\\
-u = \frac{x'}{z'}=\frac{1}{s_x}\cdot f\cdot\frac{X}{Z}+c_x\\
-v = \frac{y'}{z'}=\frac{1}{s_y}\cdot f\cdot\frac{Y}{Z}+c_y
-$$
+## Find coordinates in real world
 
-$f$ is focal length
+Diagonal of the bounding box is used as a measure of the object size in image($s'$). 
 
-$c_x$ and $c_y$ are centre of image
-
-### 2D-Euclidean-Transformation Matrix
-
+Diagonal is $\sqrt{2}$ of the root mean square of the widths of a rectangle.
 $$
 \begin{align}
-P_C &= \underbrace{R}_{\text{Rotation}}P_W+\underbrace{T}_{\text{translation}}
-\\
-\quad\\
-\begin{bmatrix}
-P_C\\
-1
-\end{bmatrix}
-&=
-\begin{bmatrix}
-R & T\\
-0 & 1
-\end{bmatrix}
-\begin{bmatrix}
-P_W\\
-1
-\end{bmatrix}
+d &= \mathrm{constant} \cdot s'\\
+x &= x' \cdot \frac{s}{s'}\\
+y &= y' \cdot \frac{s}{s'}\\
+z &= d^2-x^2-y^2
 \end{align}
 $$
+<img src="/home/yujie/Downloads/coordinates_real.png" alt="coordinates_real" style="zoom: 33%;" />
+
+<img src="/home/yujie/Downloads/coordinates_picture.png" alt="coordinates_picture" style="zoom:33%;" />
 
