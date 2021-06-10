@@ -67,11 +67,11 @@ always@(*) begin	//Write words to FIFO as state machine advances
       msg_buf_wr = 1'b1;
     end
     2'b10: begin
-      msg_buf_in = {5'b0, x_min, 5'b0, y_min};	//Top left coordinate
+      msg_buf_in = diagonal_sq_avg;	//Top left coordinate
       msg_buf_wr = 1'b1;
     end
     2'b11: begin
-      msg_buf_in = {5'b0, x_max, 5'b0, y_max}; //Bottom right coordinate
+      msg_buf_in = {5'b0, x_offset_avg, 5'b0, y_offset_avg}; //Bottom right coordinate
       msg_buf_wr = 1'b1;
     end
   endcase
@@ -113,25 +113,6 @@ assign msg_buf_flush = s_chipselect
                      & (s_address == REG_STATUS) 
                      & s_writedata[4];
 
-// -- Process read ------------------------------------------------------------
-//reg read_d;
-
-// Copy the requested word to the output port when there is a read.
-//always @ (posedge clk)
-//begin
-  //if (~reset_n) begin
-    //s_readdata <= {32'b0};
-    //read_d <= 1'b0;
-  //end
-
-  //else if(s_chipselect & s_read) begin
-    //if(s_address == REG_STATUS) s_readdata <= {16'b0,msg_buf_size,reg_status};
-    //if(s_address == READ_MSG)   s_readdata <= {msg_buf_out};
-  //end
-
-  //read_d <= s_read;
-//end
-
 //Fetch next word from message buffer after read from READ_MSG
 assign msg_buf_rd = s_chipselect
                   & s_read
@@ -150,6 +131,51 @@ MSG_FIFO	MSG_FIFO_inst (
   .q(msg_buf_out),
   .usedw(msg_buf_size),
   .empty(msg_buf_empty)
+);
+
+wire [10:0] x_offset, y_offset;
+wire [23:0] diagonal_sq;
+
+wire [10:0] x_offset_avg, y_offset_avg;
+wire [23:0] diagonal_sq_avg;
+
+find_distance fd (
+  .x_min(x_min),
+  .x_max(x_max),
+  .y_min(y_min),
+  .y_max(y_max),
+  .x_offset(x_offset),
+  .y_offset(y_offset),
+  .diagonal_sq(diagonal_sq)
+);
+
+parameter BIT = 3;
+
+mov_avg #(
+  .BIT(BIT)
+) x_offset_ma (
+  .clk(clk),
+  .rst(reset_n),
+  .x(x_offset),
+  .x_avg(x_offset_avg)
+);
+
+mov_avg #(
+  .BIT(BIT)
+) y_offset_ma (
+  .clk(clk),
+  .rst(reset_n),
+  .x(y_offset),
+  .x_avg(y_offset_avg)
+);
+
+mov_avg #(
+  .BIT(BIT)
+) diagonal_sq_ma (
+  .clk(clk),
+  .rst(reset_n),
+  .x(diagonal_sq),
+  .x_avg(diagonal_sq_avg)
 );
 
 endmodule

@@ -186,9 +186,63 @@ generate
   end
 endgenerate
 
+reg read_d;
+
+generate
+  for (j=0; j<N_COLOR; j=j+1) begin : generate_msg_buffer
+    msg_buffer #(
+      .BASE(j)
+    ) msg_buf (
+      .clk(clk), 
+      .reset_n(reset_n),
+      .x_min(x_min[j]), 
+      .x_max(x_max[j]), 
+      .y_min(y_min[j]), 
+      .y_max(y_max[j]),
+      .eop(eop), 
+      .in_valid(in_valid), 
+      .packet_video(packet_video),
+      .read_d(read_d),
+
+      .s_chipselect(s_chipselect), 
+      .s_write(s_write), 
+      .s_read(s_read),
+      .s_address(s_address), 
+      .s_writedata(s_writedata), 
+
+      // outputs
+      .hue_t(hue_t[j]),
+      .sat_t(sat_t[j]), 
+      .val_t(val_t[j]),
+
+      .msg_buf_size(msg_buf_size[j]),
+      .msg_buf_out(msg_buf_out[j]),
+      .reg_status(reg_status[j])
+    );
+  end
+endgenerate
+
+// macros for Addresses
+`define REG_STATUS(BASE) BASE*3+0
+`define READ_MSG(BASE)   BASE*3+1
+`define HSV_PARAMS(BASE) BASE*3+2
+
+always @ (posedge clk) begin
+  if (~reset_n) begin
+    s_readdata <= {32'b0};
+    read_d <= 1'b0;
+  end
+  else if(s_chipselect & s_read) begin
+    for (i=0; i<N_COLOR; i=i+1) begin : read_form_msg_buf
+      if(s_address == `REG_STATUS(i)) s_readdata <= {16'b0,msg_buf_size[i],reg_status[i]};
+      if(s_address == `READ_MSG(i))   s_readdata <= {msg_buf_out[i]};
+    end
+  end
+  read_d <= s_read;
+end
+
 wire [7:0] red_filt, green_filt, blue_filt;
 
-// Moving Average
 filter_conv #(
   .ROW_W(IMAGE_W)
 ) filt_r (
@@ -253,68 +307,5 @@ STREAM_REG #(.DATA_WIDTH(26)) out_reg (
 	.valid_in(in_valid),
 	.data_in({red_out, green_out, blue_out, sop, eop})
 );
-
-// Addresses
-`define RED    0
-`define PINK   3
-`define YELLOW 6
-`define GREEN  9
-`define BLUE   12
-`define msg_address(color) color+2;
-
-reg read_d;
-
-generate
-  for (j=0; j<N_COLOR; j=j+1) begin : generate_msg_buffer
-    msg_buffer #(
-      .BASE(j)
-    ) msg_buf (
-      .clk(clk), 
-      .reset_n(reset_n),
-      .x_min(x_min[j]), 
-      .x_max(x_max[j]), 
-      .y_min(y_min[j]), 
-      .y_max(y_max[j]),
-      .eop(eop), 
-      .in_valid(in_valid), 
-      .packet_video(packet_video),
-      .read_d(read_d),
-
-      .s_chipselect(s_chipselect), 
-      .s_write(s_write), 
-      .s_read(s_read),
-      .s_address(s_address), 
-      .s_writedata(s_writedata), 
-
-      // outputs
-      .hue_t(hue_t[j]),
-      .sat_t(sat_t[j]), 
-      .val_t(val_t[j]),
-
-      .msg_buf_size(msg_buf_size[j]),
-      .msg_buf_out(msg_buf_out[j]),
-      .reg_status(reg_status[j])
-);
-
-  end
-endgenerate
-
-`define REG_STATUS(BASE) BASE*3+0
-`define READ_MSG(BASE)   BASE*3+1
-`define HSV_PARAMS(BASE) BASE*3+2
-
-always @ (posedge clk) begin
-  if (~reset_n) begin
-    s_readdata <= {32'b0};
-    read_d <= 1'b0;
-  end
-  else if(s_chipselect & s_read) begin
-    for (i=0; i<N_COLOR; i=i+1) begin : read_form_msg_buf
-      if(s_address == `REG_STATUS(i)) s_readdata <= {16'b0,msg_buf_size[i],reg_status[i]};
-      if(s_address == `READ_MSG(i))   s_readdata <= {msg_buf_out[i]};
-    end
-  end
-  read_d <= s_read;
-end
 
 endmodule

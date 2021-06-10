@@ -29,12 +29,12 @@
 /*#define EEE_IMGPROC_MSG_START*/
 
 /*#define EXPOSURE_INIT 0x002000*/
-#define EXPOSURE_INIT 0x008000
+#define EXPOSURE_INIT 0x020000
 #define EXPOSURE_STEP 0x100
 /*#define GAIN_INIT 0x080*/
-#define GAIN_INIT 0x100
+#define GAIN_INIT 0x500
 #define GAIN_STEP 0x040
-#define DEFAULT_LEVEL 2
+#define DEFAULT_LEVEL 3
 
 #define MIPI_REG_PHYClkCtl 0x0056
 #define MIPI_REG_PHYData0Ctl 0x0058
@@ -206,16 +206,12 @@ int main() {
           if (j) {
             j = 0;
             printf("%d: ", i);
-            printf("x_max:%03d", (word << 5) >> 21);
+            printf("x_offset:%03d", (word << 5) >> 21);
             printf(", ");
-            printf("y_max:%03d", (word << 21) >> 21);
+            printf("y_offset:%03d", (word << 21) >> 21);
           } else {
-            /*if (i == 0)*/
-            /*clear();*/
             printf("%d: ", i);
-            printf("x_min:%03d", (word << 5) >> 21);
-            printf(", ");
-            printf("y_min:%03d", (word << 21) >> 21);
+            printf("d_sq:%03d", word);
             j++;
           };
           printf("\n");
@@ -223,44 +219,45 @@ int main() {
       }
     }
 
-    // Update the bounding box colour
-    /*boundingBoxColour = ((boundingBoxColour + 1) & 0xff);*/
-    /*IOWR(0x42000, EEE_IMGPROC_BBCOL,*/
-    /*(boundingBoxColour << 8) | (0xff - boundingBoxColour));*/
-
     // Process input commands
-    char str[4];
-    char *string = str;
-    int c;
-    int char_cnt = 0;
-    int hsv_cnt = 0;
-    int color_cnt = 0;
+    // -- take HSV parameters -------------------------------------------------
+    /*char str[4];*/
+    /*char *string = str;*/
+    /*int c;*/
+    /*int char_cnt = 0;*/
+    /*int hsv_cnt = 0;*/
+    /*int color_cnt = 0;*/
 
-    while ((c = getchar()) != EOF) {
-      if (c == ',') {
-        hsv[hsv_cnt] = atoi(string);
-        memset(string, NULL, sizeof(str));
-        hsv_cnt = (hsv_cnt < 2) ? hsv_cnt + 1 : 0;
-        char_cnt = 0;
-      } else if (c == ';') {
-        hsv[hsv_cnt] = atoi(string);
-        memset(string, NULL, sizeof(str));
-        hsv_cnt = (hsv_cnt < 2) ? hsv_cnt + 1 : 0;
-        char_cnt = 0;
-        color[color_cnt][0] = hsv[0];
-        color[color_cnt][1] = hsv[1];
-        color[color_cnt][2] = hsv[2];
-        color_cnt += 1;
-      } else if ((c >= '0') && (c <= '9')) {
-        str[char_cnt] = c;
-        char_cnt += 1;
-      }
-    }
+    /*while ((c = getchar()) != EOF) {*/
+    /*if (c == ',') {*/
+    /*hsv[hsv_cnt] = atoi(string);*/
+    /*memset(string, NULL, sizeof(str));*/
+    /*hsv_cnt = (hsv_cnt < 2) ? hsv_cnt + 1 : 0;*/
+    /*char_cnt = 0;*/
+    /*} else if (c == ';') {*/
+    /*hsv[hsv_cnt] = atoi(string);*/
+    /*memset(string, NULL, sizeof(str));*/
+    /*hsv_cnt = (hsv_cnt < 2) ? hsv_cnt + 1 : 0;*/
+    /*char_cnt = 0;*/
+    /*color[color_cnt][0] = hsv[0];*/
+    /*color[color_cnt][1] = hsv[1];*/
+    /*color[color_cnt][2] = hsv[2];*/
+    /*color_cnt += 1;*/
+    /*} else if ((c >= '0') && (c <= '9')) {*/
+    /*str[char_cnt] = c;*/
+    /*char_cnt += 1;*/
+    /*}*/
+    /*}*/
 
-    for (int i = 0; i < 5; i++) {
-      IOWR(0x42000, EEE_IMGPROC_HSV(i),
-           (color[i][0] << 14) | (color[i][1] << 7) | (color[i][2]));
-    }
+    /*for (int i = 0; i < 5; i++) {*/
+    /*IOWR(0x42000, EEE_IMGPROC_HSV(i),*/
+    /*(color[i][0] << 14) | (color[i][1] << 7) | (color[i][2]));*/
+    /*}*/
+    IOWR(0x42000, EEE_IMGPROC_HSV(0), (0 << 14) | (36 << 7) | (25));
+    IOWR(0x42000, EEE_IMGPROC_HSV(1), (10 << 14) | (40 << 7) | (50));
+    IOWR(0x42000, EEE_IMGPROC_HSV(2), (40 << 14) | (50 << 7) | (40));
+    IOWR(0x42000, EEE_IMGPROC_HSV(3), (120 << 14) | (35 << 7) | (35));
+    IOWR(0x42000, EEE_IMGPROC_HSV(4), (230 << 14) | (10 << 7) | (15));
     // Main loop delay
     usleep(10000);
   };
